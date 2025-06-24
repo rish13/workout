@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, Play, Calendar, Settings, X, ExternalLink } from 'lucide-react';
 import { client } from '../App';
 import type { Schema } from '../../amplify/data/resource';
+import ExerciseSearch from './ExerciseSearch';
+import { ExerciseData } from '../hooks/useExerciseDatabase';
 
 type Program = Schema['Program']['type'];
 type Workout = Schema['Workout']['type'];
@@ -102,7 +104,7 @@ const ProgramDetail: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header */}
+      {/* Header - same as before */}
       <div className="mb-8">
         <Link
           to="/"
@@ -139,7 +141,7 @@ const ProgramDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Workouts Grid */}
+      {/* Workouts Grid - same as before */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {workouts.map((workout) => (
           <WorkoutCard
@@ -159,7 +161,7 @@ const ProgramDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Create Workout Modal */}
+      {/* Create Workout Modal - same as before */}
       {showWorkoutForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -224,7 +226,7 @@ const ProgramDetail: React.FC = () => {
   );
 };
 
-// Workout Card Component (unchanged)
+// Workout Card Component - same as before
 interface WorkoutCardProps {
   workout: Workout;
   program: Program;
@@ -284,7 +286,7 @@ const WorkoutCard: React.FC<WorkoutCardProps> = ({ workout, program, onEdit }) =
   );
 };
 
-// Enhanced Workout Detail Modal Component with YouTube-enabled substitutions
+// Enhanced Workout Detail Modal with Exercise Search
 interface WorkoutDetailModalProps {
   workout: Workout;
   program: Program;
@@ -294,6 +296,7 @@ interface WorkoutDetailModalProps {
 const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, program, onClose }) => {
   const [exercises, setExercises] = useState<ExerciseWithConfig[]>([]);
   const [showExerciseForm, setShowExerciseForm] = useState(false);
+  const [showCustomForm, setShowCustomForm] = useState(false);
   const [substitutions, setSubstitutions] = useState<SubstitutionOption[]>([{ name: '', youtubeUrl: '' }]);
   const [newExercise, setNewExercise] = useState({
     name: '',
@@ -342,6 +345,21 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
     }
   };
 
+  const handleSelectExercise = (exerciseData: ExerciseData) => {
+    setNewExercise(prev => ({
+      ...prev,
+      name: exerciseData.name,
+      youtubeUrl: exerciseData.youtubeUrl
+    }));
+    setShowExerciseForm(true);
+    setShowCustomForm(false);
+  };
+
+  const handleCreateCustom = () => {
+    setShowCustomForm(true);
+    setShowExerciseForm(true);
+  };
+
   const addSubstitution = () => {
     setSubstitutions([...substitutions, { name: '', youtubeUrl: '' }]);
   };
@@ -369,11 +387,9 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
         orderIndex: exercises.length,
       });
 
-      // Filter out empty substitutions and convert to JSON string
       const validSubstitutions = substitutions.filter(sub => sub.name.trim() !== '');
       const substitutionsJson = validSubstitutions.length > 0 ? JSON.stringify(validSubstitutions) : undefined;
 
-      // Create configuration for all weeks
       for (let week = 1; week <= program.durationWeeks; week++) {
         await client.models.ExerciseWeekConfig.create({
           exerciseId: exercise.data!.id,
@@ -405,6 +421,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
       });
       setSubstitutions([{ name: '', youtubeUrl: '' }]);
       setShowExerciseForm(false);
+      setShowCustomForm(false);
       fetchExercises();
     } catch (error) {
       console.error('Error creating exercise:', error);
@@ -422,7 +439,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
     try {
       return JSON.parse(substitutionString);
     } catch {
-      // Fallback for old format (plain string)
       return substitutionString.split(',').map(name => ({ name: name.trim(), youtubeUrl: '' }));
     }
   };
@@ -496,7 +512,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                     </div>
                   )}
 
-                  {/* Enhanced Substitutions Display */}
                   {exercise.weekConfig?.substitutionOptions && (
                     <div className="mt-3">
                       <span className="font-medium text-sm text-gray-700">Substitutions:</span>
@@ -527,42 +542,80 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
           ))}
         </div>
 
-        {/* Enhanced Add Exercise Form */}
-        {showExerciseForm ? (
+        {/* Exercise Search or Form */}
+        {!showExerciseForm ? (
+          <div className="bg-gray-50 rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-4">Add Exercise</h3>
+            <ExerciseSearch
+              onSelectExercise={handleSelectExercise}
+              onCreateCustom={handleCreateCustom}
+            />
+          </div>
+        ) : (
+          /* Exercise Configuration Form */
           <form onSubmit={createExercise} className="bg-gray-50 rounded-lg p-6 space-y-4">
-            <h3 className="text-lg font-semibold mb-4">Add New Exercise</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">
+                {showCustomForm ? 'Create Custom Exercise' : `Configure: ${newExercise.name}`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExerciseForm(false);
+                  setShowCustomForm(false);
+                  setNewExercise({
+                    name: '',
+                    youtubeUrl: '',
+                    workingSets: 3,
+                    warmupSets: 0,
+                    repRange: '8-12',
+                    earlySetRPE: 7,
+                    lastSetRPE: 9,
+                    restSeconds: 120,
+                    notes: '',
+                    lastSetIntensityTechnique: '',
+                  });
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Exercise Name */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Exercise Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newExercise.name}
-                  onChange={(e) => setNewExercise(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Bench Press, Squats"
-                />
-              </div>
+              {/* Show name/URL fields only for custom exercises */}
+              {showCustomForm && (
+                <>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Exercise Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newExercise.name}
+                      onChange={(e) => setNewExercise(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., Bench Press, Squats"
+                    />
+                  </div>
 
-              {/* YouTube URL */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  YouTube URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  value={newExercise.youtubeUrl}
-                  onChange={(e) => setNewExercise(prev => ({ ...prev, youtubeUrl: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://youtube.com/watch?v=..."
-                />
-              </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      YouTube URL (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={newExercise.youtubeUrl}
+                      onChange={(e) => setNewExercise(prev => ({ ...prev, youtubeUrl: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="https://youtube.com/watch?v=..."
+                    />
+                  </div>
+                </>
+              )}
 
-              {/* Working Sets */}
+              {/* Rest of the form fields remain the same */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Working Sets *
@@ -578,7 +631,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 />
               </div>
 
-              {/* Warmup Sets */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Warmup Sets
@@ -593,7 +645,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 />
               </div>
 
-              {/* Rep Range */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Rep Range *
@@ -608,7 +659,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 />
               </div>
 
-              {/* RPE Range */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   RPE Range
@@ -640,10 +690,9 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 </div>
               </div>
 
-              {/* Rest Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Rest Time (seconds)
+                  Rest Time
                 </label>
                 <select
                   value={newExercise.restSeconds}
@@ -660,7 +709,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 </select>
               </div>
 
-              {/* Last Set Intensity Technique */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Last Set Technique
@@ -679,7 +727,6 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 </select>
               </div>
 
-              {/* Notes */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Notes
@@ -693,7 +740,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
                 />
               </div>
 
-              {/* Enhanced Substitution Options */}
+              {/* Substitution Options */}
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -754,21 +801,16 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({ workout, progra
               </button>
               <button
                 type="button"
-                onClick={() => setShowExerciseForm(false)}
+                onClick={() => {
+                  setShowExerciseForm(false);
+                  setShowCustomForm(false);
+                }}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-md transition-colors"
               >
-                Cancel
+                Back to Search
               </button>
             </div>
           </form>
-        ) : (
-          <button
-            onClick={() => setShowExerciseForm(true)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-md transition-colors flex items-center justify-center"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Add Exercise
-          </button>
         )}
       </div>
     </div>
