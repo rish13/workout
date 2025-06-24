@@ -7,25 +7,21 @@ export default defineConfig({
     global: 'globalThis',
   },
   build: {
-    chunkSizeWarningLimit: 800, // Increase warning threshold
-    sourcemap: false, // Disable source maps in production to reduce size
-    minify: 'terser', // Use terser for better minification
+    chunkSizeWarningLimit: 800,
+    sourcemap: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true
+      }
+    },
     rollupOptions: {
       output: {
-        // Split code into smaller chunks
-        manualChunks: (id) => {
-          if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('scheduler') || id.includes('prop-types')) {
-              return 'vendor-react';
-            }
-            if (id.includes('aws-amplify')) {
-              return 'vendor-amplify';
-            }
-            if (id.includes('lucide')) {
-              return 'vendor-icons';
-            }
-            return 'vendor'; // all other packages
-          }
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-amplify': ['aws-amplify', '@aws-amplify/ui-react'],
+          'vendor-icons': ['lucide-react']
         }
       }
     }
