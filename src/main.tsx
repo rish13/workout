@@ -5,18 +5,12 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 
-// Try to import the outputs file, but provide a fallback if it doesn't exist
-let amplifyConfig = {};
-try {
-  // This will be replaced with the actual outputs during build
-  const outputs = require('../amplify_outputs.json');
-  amplifyConfig = outputs;
-  console.log('Amplify outputs loaded successfully');
-} catch (e) {
-  console.warn('No amplify_outputs.json found. Running in dev mode without backend connection.');
-}
+// Import the outputs file
+import amplifyOutputs from '../amplify_outputs.json';
 
-Amplify.configure(amplifyConfig);
+console.log('Amplify outputs loaded:', amplifyOutputs);
+
+Amplify.configure(amplifyOutputs);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
