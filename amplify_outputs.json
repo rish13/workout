@@ -1,0 +1,12 @@
+{
+  "auth": {
+    "region": "placeholder",
+    "userPoolId": "placeholder",
+    "userPoolClientId": "placeholder"
+  },
+  "api": {
+    "region": "placeholder",
+    "endpoint": "placeholder",
+    "apiName": "placeholder"
+  }
+}
