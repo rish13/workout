@@ -6,4 +6,12 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined // Disable code splitting that might cause issues
+      }
+    }
+  }
 })
