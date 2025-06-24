@@ -7,10 +7,26 @@ export default defineConfig({
     global: 'globalThis',
   },
   build: {
-    sourcemap: true,
+    chunkSizeWarningLimit: 800, // Increase warning threshold
+    sourcemap: false, // Disable source maps in production to reduce size
+    minify: 'terser', // Use terser for better minification
     rollupOptions: {
       output: {
-        manualChunks: undefined // Disable code splitting that might cause issues
+        // Split code into smaller chunks
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('scheduler') || id.includes('prop-types')) {
+              return 'vendor-react';
+            }
+            if (id.includes('aws-amplify')) {
+              return 'vendor-amplify';
+            }
+            if (id.includes('lucide')) {
+              return 'vendor-icons';
+            }
+            return 'vendor'; // all other packages
+          }
+        }
       }
     }
   }
