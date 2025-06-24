@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Clock, Target, TrendingUp, Check } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, Target, TrendingUp, Check, Trash2, Plus } from 'lucide-react';
 import { client } from '../App';
 import type { Schema } from '../../amplify/data/resource';
 
@@ -9,6 +9,15 @@ type Workout = Schema['Workout']['type'];
 type Exercise = Schema['Exercise']['type'];
 type ExerciseWeekConfig = Schema['ExerciseWeekConfig']['type'];
 type SetLog = Schema['SetLog']['type'];
+
+// UI-only interface for sets during workout session
+interface WorkoutSet {
+  setNumber: number;
+  weight: number;
+  reps: number;
+  rpe?: number;
+  isWarmup: boolean;
+}
 
 interface ExerciseWithConfig extends Exercise {
   weekConfig?: ExerciseWeekConfig;
@@ -26,7 +35,7 @@ const WorkoutSession: React.FC = () => {
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [exercises, setExercises] = useState<ExerciseWithConfig[]>([]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [sets, setSets] = useState<{ [exerciseId: string]: SetLog[] }>({});
+  const [sets, setSets] = useState<{ [exerciseId: string]: WorkoutSet[] }>({});
   const [loading, setLoading] = useState(true);
   const [isCompleted, setIsCompleted] = useState(false);
 
@@ -39,15 +48,12 @@ const WorkoutSession: React.FC = () => {
 
   const fetchWorkoutData = async () => {
     try {
-      // Fetch program
       const programResult = await client.models.Program.get({ id: programId! });
       setProgram(programResult.data);
 
-      // Fetch workout
       const workoutResult = await client.models.Workout.get({ id: workoutId! });
       setWorkout(workoutResult.data);
 
-      // Fetch exercises
       const exercisesResult = await client.models.Exercise.list({
         filter: { workoutId: { eq: workoutId } }
       });
@@ -56,7 +62,6 @@ const WorkoutSession: React.FC = () => {
         exercisesResult.data
           .sort((a, b) => a.orderIndex - b.orderIndex)
           .map(async (exercise) => {
-            // Get week configuration
             const configResult = await client.models.ExerciseWeekConfig.list({
               filter: {
                 exerciseId: { eq: exercise.id },
@@ -64,11 +69,9 @@ const WorkoutSession: React.FC = () => {
               }
             });
 
-            // Get previous week logs for comparison
             let previousWeekLogs: SetLog[] = [];
             if (previousWeek > 0) {
               try {
-                // Step 1: Get previous week's workout logs
                 const previousWorkoutLogsResult = await client.models.WorkoutLog.list({
                   filter: {
                     programId: { eq: programId },
@@ -80,7 +83,6 @@ const WorkoutSession: React.FC = () => {
                 if (previousWorkoutLogsResult.data.length > 0) {
                   const previousWorkoutLog = previousWorkoutLogsResult.data[0];
 
-                  // Step 2: Get exercise logs for this exercise from the previous workout
                   const previousExerciseLogsResult = await client.models.ExerciseLog.list({
                     filter: {
                       workoutLogId: { eq: previousWorkoutLog.id },
@@ -91,7 +93,6 @@ const WorkoutSession: React.FC = () => {
                   if (previousExerciseLogsResult.data.length > 0) {
                     const previousExerciseLog = previousExerciseLogsResult.data[0];
 
-                    // Step 3: Get set logs for this exercise log
                     const previousSetLogsResult = await client.models.SetLog.list({
                       filter: {
                         exerciseLogId: { eq: previousExerciseLog.id }
@@ -103,7 +104,6 @@ const WorkoutSession: React.FC = () => {
                 }
               } catch (error) {
                 console.error('Error fetching previous week logs:', error);
-                // Continue without previous week data
               }
             }
 
@@ -117,8 +117,8 @@ const WorkoutSession: React.FC = () => {
 
       setExercises(exercisesWithConfig);
 
-      // Initialize sets for each exercise
-      const initialSets: { [exerciseId: string]: SetLog[] } = {};
+      // Initialize sets for each exercise using WorkoutSet interface
+      const initialSets: { [exerciseId: string]: WorkoutSet[] } = {};
       exercisesWithConfig.forEach(exercise => {
         if (exercise.weekConfig) {
           const workingSets = exercise.weekConfig.workingSets || 3;
@@ -132,7 +132,7 @@ const WorkoutSession: React.FC = () => {
               reps: 0,
               rpe: undefined,
               isWarmup: true,
-            } as SetLog)),
+            } as WorkoutSet)),
             // Working sets
             ...Array.from({ length: workingSets }, (_, i) => ({
               setNumber: warmupSets + i + 1,
@@ -140,7 +140,7 @@ const WorkoutSession: React.FC = () => {
               reps: 0,
               rpe: undefined,
               isWarmup: false,
-            } as SetLog))
+            } as WorkoutSet))
           ];
         }
       });
@@ -153,7 +153,7 @@ const WorkoutSession: React.FC = () => {
     }
   };
 
-  const updateSet = (exerciseId: string, setIndex: number, field: keyof SetLog, value: any) => {
+  const updateSet = (exerciseId: string, setIndex: number, field: keyof WorkoutSet, value: any) => {
     setSets(prev => ({
       ...prev,
       [exerciseId]: prev[exerciseId].map((set, index) => 
@@ -162,9 +162,42 @@ const WorkoutSession: React.FC = () => {
     }));
   };
 
+  const deleteSet = (exerciseId: string, setIndex: number) => {
+    setSets(prev => {
+      const updatedSets = prev[exerciseId].filter((_, index) => index !== setIndex);
+      // Renumber sets
+      return {
+        ...prev,
+        [exerciseId]: updatedSets.map((set, index) => ({ 
+          ...set, 
+          setNumber: index + 1 
+        }))
+      };
+    });
+  };
+
+  const addSet = (exerciseId: string, isWarmup: boolean = false) => {
+    setSets(prev => {
+      const currentSets = prev[exerciseId] || [];
+      const newSetNumber = currentSets.length + 1;
+      
+      const newSet: WorkoutSet = {
+        setNumber: newSetNumber,
+        weight: 0,
+        reps: 0,
+        rpe: undefined,
+        isWarmup,
+      };
+
+      return {
+        ...prev,
+        [exerciseId]: [...currentSets, newSet]
+      };
+    });
+  };
+
   const completeWorkout = async () => {
     try {
-      // Create workout log
       const workoutLog = await client.models.WorkoutLog.create({
         programId: programId!,
         workoutId: workoutId!,
@@ -172,7 +205,6 @@ const WorkoutSession: React.FC = () => {
         completedAt: new Date().toISOString(),
       });
 
-      // Create exercise logs and set logs
       for (const exercise of exercises) {
         const exerciseLog = await client.models.ExerciseLog.create({
           workoutLogId: workoutLog.data!.id,
@@ -314,7 +346,7 @@ const WorkoutSession: React.FC = () => {
             </div>
           )}
 
-          {/* Sets Table */}
+          {/* Enhanced Sets Table with Delete Functionality */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -323,6 +355,7 @@ const WorkoutSession: React.FC = () => {
                   <th className="text-left py-2 px-3">Weight (lbs)</th>
                   <th className="text-left py-2 px-3">Reps</th>
                   <th className="text-left py-2 px-3">RPE</th>
+                  <th className="text-left py-2 px-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -367,11 +400,38 @@ const WorkoutSession: React.FC = () => {
                           placeholder="-"
                         />
                       </td>
+                      <td className="py-3 px-3">
+                        <button
+                          onClick={() => deleteSet(currentExercise.id, index)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded transition-colors"
+                          title="Delete Set"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Add Set Buttons */}
+          <div className="flex space-x-2 mt-4">
+            <button
+              onClick={() => addSet(currentExercise.id, false)}
+              className="flex items-center space-x-1 bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-md transition-colors text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Working Set</span>
+            </button>
+            <button
+              onClick={() => addSet(currentExercise.id, true)}
+              className="flex items-center space-x-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md transition-colors text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Warmup Set</span>
+            </button>
           </div>
 
           {/* Notes */}
